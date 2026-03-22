@@ -80,6 +80,7 @@ MAX_RECOG_QUEUE = int(os.getenv("SAVE_QUEUE",20))
 MAX_FRAME_QUEUE = int(os.getenv("MAX_FRAME_QUEUE",2))
 
 
+
 # ─────────────────────────────────────────────
 # PyAV capture config
 # ─────────────────────────────────────────────
@@ -87,6 +88,7 @@ PYAV_THREAD_TYPE  = "slice"   # slice | frame | none  (slice best for MJPEG)
 PYAV_THREAD_COUNT = 0         # 0 = libav chooses; 2-4 is good for 1080p
 PYAV_RTBUF        = "256k"    # ring buffer — keep small for low latency
 PYAV_PIXEL_FMT    = "bgr24"   # bgr24 = ready for numpy/cv2; yuv420p = faster decode
+
 
 # FFmpeg open options — same flags that gave 10ms avg latency in benchmarks
 _PYAV_OPTIONS = {
@@ -112,8 +114,7 @@ _THREAD_TYPE_MAP = {
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - [%(name)s] - %(levelname)s - %(message)s",
-    datefmt="%H:%M:%S",
-)
+    datefmt="%H:%M:%S")
 
 
 
@@ -123,6 +124,8 @@ logging.basicConfig(
 
 def _cosine_sim(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.dot(a, b))
+
+
 
 
 def _pool_has_duplicate(emb: np.ndarray, pool: deque, min_sim: float) -> bool:
@@ -147,6 +150,7 @@ def draw_detections(frame: np.ndarray, results: list, fps: float = 0) -> np.ndar
     return frame
 
 
+
 # ─────────────────────────────────────────────
 # Worker
 # ─────────────────────────────────────────────
@@ -167,6 +171,7 @@ class OptimizedCameraWorker(QThread):
     fps_updated    = Signal(float)
     error_occurred = Signal(str)
     face_saved     = Signal(str, str, float, str)
+
 
     def __init__(
         self,

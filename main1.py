@@ -21,6 +21,7 @@ from PySide6.QtGui import QFont, QPainter, QPainterPath, QColor, QPixmap
 
 from app.pages.about import AboutPage
 from app.pages.profile import ProfilePage
+from app.pages.settings import SettingsPage
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -208,7 +209,22 @@ class MainWindow(QMainWindow):
             )
             sys.exit(1)
 
+
+
+    def _on_settings_saved(self):
+        print("[SETTINGS] .env updated")
+        # Stop all cameras first, then reload model config
+        if hasattr(self, 'live_page'):
+            self.live_page.cleanup()
+
+        from app.workers.model_manager import ModelManager
+        ModelManager.reload_config()
+        print("[SETTINGS] Model config reloaded — restart cameras to apply")
+
+
     def setup_ui(self):
+
+
         """Setup user interface"""
         main_widget = QWidget()
         main_layout = QHBoxLayout(main_widget)
@@ -227,16 +243,13 @@ class MainWindow(QMainWindow):
         self.live_page = LiveDetectionPage(
             self.attendance_manager,
             self.faiss_index_path,
-            self.faiss_metadata_path
-        )
+            self.faiss_metadata_path)
 
-        self.registration_page = RegistrationPage(
-        )
+        self.registration_page = RegistrationPage()
 
         self.attendance_page = AttendancePage(
             self.attendance_manager,
-            self.user_manager
-        )
+            self.user_manager)
 
         self.users_page = UsersPage(
            face_registration= self.face_registration
@@ -248,6 +261,11 @@ class MainWindow(QMainWindow):
 
         self.about_page = AboutPage()
 
+        self.settings_page = SettingsPage()
+
+        self.settings_page.settings_saved.connect(self._on_settings_saved)
+
+
         # Add ALL pages to stack in the correct order - DO THIS ONLY ONCE
         self.stacked_widget.addWidget(self.live_page)  # Index 0
         self.stacked_widget.addWidget(self.registration_page)  # Index 1
@@ -256,6 +274,8 @@ class MainWindow(QMainWindow):
         self.stacked_widget.addWidget(self.watchlist_page)  # Index 4
         self.stacked_widget.addWidget(self.profile_page)  # Index 5
         self.stacked_widget.addWidget(self.about_page)  # Index 6
+        self.stacked_widget.addWidget(self.settings_page) # Index 7
+
 
         main_layout.addWidget(self.stacked_widget)
 
@@ -283,7 +303,8 @@ class MainWindow(QMainWindow):
             ("Attendance", "attendance", "📋"),
             ("Watchlist", "watchlist", "🚨"),
             ("Profile", "profile", "👤"),
-            ("About", "about", "ℹ")
+            ("About", "about", "ℹ"),
+            ("Settings", "settings", "⚙")
         ]
 
         self.nav_buttons = {}
@@ -458,9 +479,9 @@ class MainWindow(QMainWindow):
             "attendance": 2,
             "users": 3,  # ← ADD THIS LINE
             "watchlist": 4,  # ✅ ADD THIS LINE
-
             "profile": 5,
-            "about": 6
+            "about": 6,
+            "settings": 7
         }
 
         page_index = page_map.get(page_name)

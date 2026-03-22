@@ -9,8 +9,16 @@ import importlib
 import requests
 import numpy as np
 from pathlib import Path
-from dotenv import load_dotenv
 import insightface
+from insightface.utils import face_align as _face_align
+from insightface.app import FaceAnalysis as _FaceAnalysis
+from app.workers.face_registration import FaceRegistration
+from dotenv import load_dotenv, dotenv_values
+from pathlib import Path
+from app.config.api_config import _get_api_base, _get_timeout, _get_endpoint
+
+
+
 # ─────────────────────────────────────────────
 #  Patch InsightFace face_align ONCE at import time
 #  so norm_crop accepts any size (e.g. 300x300)
@@ -34,9 +42,6 @@ def _patch_face_align():
 
 _patch_face_align()
 
-from insightface.utils import face_align as _face_align
-from insightface.app import FaceAnalysis as _FaceAnalysis
-from app.workers.face_registration import FaceRegistration
 
 FACE_CROP_SIZE = 300  # aligned crop size sent to API
 
@@ -78,15 +83,18 @@ except ImportError:
     _quality_matcher_available = False
     print("[REG PAGE] Warning: GlobalQualityMatcher not available")
 
-# ─────────────────────────────────────────────
-#  Load API config from .env
-# ─────────────────────────────────────────────
-load_dotenv()
-API_HOST = os.getenv("API_HOST", "127.0.0.1")
-API_PORT = os.getenv("API_PORT", "8004")
-API_BASE_URL = f"http://{API_HOST}:{API_PORT}"
-REGISTER_ENDPOINT = f"{API_BASE_URL}/faces/register"
-API_TIMEOUT = int(os.getenv("API_TIMEOUT", "30"))
+
+_ENV_PATH = Path(".env")
+
+
+
+
+def _get_register_endpoint() -> str:
+    return f"{_get_api_base()}/faces/register"
+
+
+
+
 
 
 # ─────────────────────────────────────────────
@@ -129,10 +137,10 @@ class RegistrationAPIWorker(QThread):
 
             # ── POST request ────────────────────────────────────────────
             response = requests.post(
-                REGISTER_ENDPOINT,
+                _get_register_endpoint(),
                 data=self.user_data,
                 files=files,
-                timeout=API_TIMEOUT,
+                timeout=_get_timeout(),
             )
 
             if response.status_code == 200:
@@ -150,13 +158,13 @@ class RegistrationAPIWorker(QThread):
 
         except requests.exceptions.ConnectionError:
             self.failed.emit(
-                f"Cannot connect to API server at {API_BASE_URL}.\n"
+                f"Cannot connect to API server at {_get_api_base()}.\n"
                 "Please check that the server is running and API_HOST / API_PORT "
                 "in your .env file are correct."
             )
         except requests.exceptions.Timeout:
             self.failed.emit(
-                f"Request timed out after {API_TIMEOUT}s. "
+                f"Request timed out after {_get_timeout()}s. "
                 "The server may be busy."
             )
         except Exception as e:
@@ -397,7 +405,7 @@ class RegistrationPage(QWidget):
 
         # API status banner
         self.api_status_label = QLabel(
-            f"🌐 API: {API_BASE_URL}"
+            f"🌐 API: {_get_api_base()}"
         )
         self.api_status_label.setStyleSheet(
             "color:#64748b; font-size:12px; padding:4px;"
@@ -946,7 +954,7 @@ class RegistrationPage(QWidget):
         self.reset_button.setEnabled(False)
         self.status_label.setText("⏳ Sending to API…")
         self.status_label.setStyleSheet("color:#ffc107; font-size:14px; font-weight:bold;")
-        self.api_status_label.setText(f"🌐 Posting to {REGISTER_ENDPOINT} …")
+        self.api_status_label.setText(f"🌐 Posting to {_get_register_endpoint()} …")
 
         # ── Launch background worker ───────────────────────────────────
         self._api_worker = RegistrationAPIWorker(
@@ -963,7 +971,7 @@ class RegistrationPage(QWidget):
 
         self.status_label.setText("✅ Registered successfully!")
         self.status_label.setStyleSheet("color:#22c55e; font-size:14px; font-weight:bold;")
-        self.api_status_label.setText(f"🌐 API: {API_BASE_URL}")
+        self.api_status_label.setText(f"🌐 API: {_get_api_base()}")
 
         self._show_success_dialog(user_id, name, data.get("message", ""))
         self.registration_completed.emit(user_id, name)
@@ -972,7 +980,7 @@ class RegistrationPage(QWidget):
     def _on_api_duplicate(self, data: dict):
         self.status_label.setText("❌ Duplicate detected")
         self.status_label.setStyleSheet("color:#ef4444; font-size:14px; font-weight:bold;")
-        self.api_status_label.setText(f"🌐 API: {API_BASE_URL}")
+        self.api_status_label.setText(f"🌐 API: {_get_api_base()}")
 
         dlg = DuplicateUserDialog(data, self)
         dlg.exec()
@@ -981,7 +989,7 @@ class RegistrationPage(QWidget):
     def _on_api_failed(self, error_msg: str):
         self.status_label.setText("❌ Registration failed")
         self.status_label.setStyleSheet("color:#ef4444; font-size:14px; font-weight:bold;")
-        self.api_status_label.setText(f"🌐 API: {API_BASE_URL}")
+        self.api_status_label.setText(f"🌐 API: {_get_api_base()}")
         self.register_button.setEnabled(True)
         self.reset_button.setEnabled(True)
 

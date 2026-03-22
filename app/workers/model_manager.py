@@ -9,18 +9,34 @@ import threading
 import time
 import numpy as np
 from insightface.app import FaceAnalysis
-from dotenv import load_dotenv
+from dotenv import load_dotenv, dotenv_values
+from pathlib import Path
 import os
 
+
+
 load_dotenv()
+_ENV_PATH = Path(".env")
 
 
-_det_size_env = os.getenv("DET_SIZE")
-DET_THRESH            = float(os.getenv("DET_THRESH", 0.3))
-DET_SIZE = tuple(int(x) for x in _det_size_env.split(",")) if _det_size_env else (640, 384)
+def _read_det_size() -> tuple[int, int]:
+    env = dotenv_values(_ENV_PATH) if _ENV_PATH.exists() else {}
+    val = env.get("DET_SIZE", os.getenv("DET_SIZE", "640,384"))
+    try:
+        w, h = val.split(",")
+        return (int(w.strip()), int(h.strip()))
+    except (ValueError, AttributeError):
+        return (640, 384)
 
 
 
+def _read_det_thresh() -> float:
+    env = dotenv_values(_ENV_PATH) if _ENV_PATH.exists() else {}
+    val = env.get("DET_THRESH", os.getenv("DET_THRESH", "0.3"))
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return 0.3
 
 
 
@@ -34,10 +50,10 @@ class ModelManager:
 
     # ── Store config at class level so all threads see the same settings ──
     _config = {
-        'model_name': 'buffalo_s_int8',
-        'det_size':   DET_SIZE,
-        'det_thresh': DET_THRESH,
-        'ctx_id':     0,
+        'model_name': os.getenv("ARC_FACE_MODEL", "buffalo_s_int8"),
+        'det_size': _read_det_size(),  # ← dynamic read at startup
+        'det_thresh': _read_det_thresh(),  # ← dynamic read at startup
+        'ctx_id': 0,
     }
 
 
@@ -202,6 +218,24 @@ class ModelManager:
         print(f"[MODEL_MANAGER] ✓ Warmup complete ({warmup_time:.1f}ms)")
         print("[MODEL_MANAGER] ✓ Ready for real-time processing")
 
+    @classmethod
+    def reload_config(cls):
+        """
+        Re-read .env and reset model so new DET_SIZE/DET_THRESH take effect.
+        Call this from Settings page after saving — then restart camera workers.
+        WARNING: Affects all active camera workers — stop them first.
+        """
+        cls.reset()  # clears singleton
+
+        # Re-read fresh values
+        cls._config = {
+            'model_name': os.getenv("ARC_FACE_MODEL", "buffalo_s_int8"),
+            'det_size': _read_det_size(),
+            'det_thresh': _read_det_thresh(),
+            'ctx_id': 0,
+        }
+        print(f"[MODEL_MANAGER] Config reloaded: {cls._config}")
+
 
 # =============================================================================
 # GLOBAL FUNCTIONS FOR EASY ACCESS
@@ -263,8 +297,9 @@ if __name__ == "__main__":
     
     # Test inference
     print("\n4. Testing inference...")
-    test_img = np.random.randint(0, 255, (DET_SIZE[0],DET_SIZE[1], 3), dtype=np.uint8)
-    
+    det = _read_det_size()
+    test_img = np.random.randint(0, 255, (det[0], det[1], 3), dtype=np.uint8)
+
     start = time.time()
     faces = model.get(test_img, max_num=10)
     inference_time = (time.time() - start) * 1000

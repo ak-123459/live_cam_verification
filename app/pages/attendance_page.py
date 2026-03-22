@@ -14,18 +14,17 @@ from datetime import datetime, timedelta
 import requests
 import cv2
 import os
-
-from dotenv import load_dotenv
-load_dotenv()
-
-# ─── API config (same .env as registration) ──────────────────────────────────
-API_HOST    = os.getenv("API_HOST", "127.0.0.1")
-API_PORT    = os.getenv("API_PORT", "8004")
-API_BASE    = f"http://{API_HOST}:{API_PORT}"
-API_TIMEOUT = int(os.getenv("API_TIMEOUT", "30"))
-
 # Import status constants
 from app.db.database import DatabaseConfig, AttendanceStatus
+from dotenv import load_dotenv, dotenv_values
+from pathlib import Path
+from app.config.api_config import _get_api_base, _get_timeout, _get_endpoint
+
+
+_ENV_PATH = Path(".env")
+
+
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -54,9 +53,9 @@ class AttendanceFetchWorker(QThread):
                 params["user_id"] = self.user_id
 
             resp = requests.get(
-                f"{API_BASE}/attendance",
+                f"{_get_api_base()}/attendance",
                 params=params,
-                timeout=API_TIMEOUT,
+                timeout=_get_timeout(),
             )
 
             if resp.status_code == 200:
@@ -69,11 +68,11 @@ class AttendanceFetchWorker(QThread):
 
         except requests.exceptions.ConnectionError:
             self.failed.emit(
-                f"Cannot connect to API at {API_BASE}.\n"
+                f"Cannot connect to API at {_get_api_base()}.\n"
                 "Check that the server is running and API_HOST/API_PORT in .env are correct."
             )
         except requests.exceptions.Timeout:
-            self.failed.emit(f"Request timed out after {API_TIMEOUT}s.")
+            self.failed.emit(f"Request timed out after {_get_timeout()}s.")
         except Exception as e:
             self.failed.emit(f"Unexpected error: {e}")
 
@@ -254,7 +253,7 @@ class AttendancePage(QWidget):
         title_row.addStretch()
 
         # API indicator
-        self.api_label = QLabel(f"🌐 {API_BASE}/attendance")
+        self.api_label = QLabel(f"🌐 {_get_api_base()}/attendance")
         self.api_label.setStyleSheet("color: #64748b; font-size: 12px;")
         title_row.addWidget(self.api_label)
         layout.addLayout(title_row)
@@ -432,7 +431,7 @@ class AttendancePage(QWidget):
         # Disable controls while loading
         self.search_btn.setEnabled(False)
         self.loading_label.show()
-        self.api_label.setText(f"🌐 Fetching {API_BASE}/attendance …")
+        self.api_label.setText(f"🌐 Fetching {_get_api_base()}/attendance …")
 
         self._fetch_worker = AttendanceFetchWorker(
             start_date=selected_date,
@@ -447,7 +446,7 @@ class AttendancePage(QWidget):
         """Called in the main thread when the API response arrives."""
         self.search_btn.setEnabled(True)
         self.loading_label.hide()
-        self.api_label.setText(f"🌐 {API_BASE}/attendance")
+        self.api_label.setText(f"🌐 {_get_api_base()}/attendance")
 
         # Client-side status filter
         status_filter = self.status_filter.currentData()
@@ -461,7 +460,7 @@ class AttendancePage(QWidget):
     def _on_fetch_failed(self, error_msg: str):
         self.search_btn.setEnabled(True)
         self.loading_label.hide()
-        self.api_label.setText(f"🌐 {API_BASE}/attendance  ❌")
+        self.api_label.setText(f"🌐 {_get_api_base()}/attendance  ❌")
         QMessageBox.critical(self, "Failed to Load Attendance", error_msg)
 
     # ─────────────────────────────────────────────────────────────
@@ -566,9 +565,9 @@ class AttendancePage(QWidget):
         # Today count — quick synchronous call (stats, not a big payload)
         try:
             r = requests.get(
-                f"{API_BASE}/attendance",
+                f"{_get_api_base()}/attendance",
                 params={"start_date": today_str, "end_date": today_str},
-                timeout=API_TIMEOUT,
+                timeout=_get_timeout(),
             )
             today_count = r.json().get("total", 0) if r.ok else "?"
         except Exception:
@@ -577,9 +576,9 @@ class AttendancePage(QWidget):
         # Week count
         try:
             r = requests.get(
-                f"{API_BASE}/attendance",
+                f"{_get_api_base()}/attendance",
                 params={"start_date": week_start, "end_date": today_str},
-                timeout=API_TIMEOUT,
+                timeout=_get_timeout(),
             )
             week_count = r.json().get("total", 0) if r.ok else "?"
         except Exception:

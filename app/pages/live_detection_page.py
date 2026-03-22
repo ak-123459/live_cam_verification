@@ -16,18 +16,35 @@ import sys
 import os
 from FacePose.app.predictor import FacePosePredictor
 from app.workers.model_manager import ModelManager
-from dotenv import load_dotenv
 import os
+from dotenv import load_dotenv, dotenv_values
+from pathlib import Path
 
 
 
-load_dotenv()
+_ENV_PATH = Path(".env")
 
 
-RECOG_THRESH =  float(os.getenv("RECOG_THRESH",.20))
-DET_SIZE = ModelManager._config['det_size']   # always in sync
-MAX_CAMERAS = int(os.getenv("MAX_CAMERA",2))
 
+
+def _get_env(key: str, default, cast=str):
+    env = dotenv_values(_ENV_PATH) if _ENV_PATH.exists() else {}
+    val = env.get(key, os.getenv(key, str(default)))
+    try:
+        return cast(val)
+    except (ValueError, TypeError):
+        return cast(default)
+
+
+
+def _get_det_size() -> tuple[int, int]:
+    env = dotenv_values(_ENV_PATH) if _ENV_PATH.exists() else {}
+    val = env.get("DET_SIZE", os.getenv("DET_SIZE", "640,384"))
+    try:
+        w, h = val.split(",")
+        return int(w.strip()), int(h.strip())
+    except (ValueError, AttributeError):
+        return (640, 384)   # safe fallback
 
 
 predictor = FacePosePredictor(
@@ -553,6 +570,7 @@ class LiveDetectionPage(QWidget):
             camera_widget = CameraWidget(camera_id, camera_name)
             camera_widget.delete_requested.connect(self.delete_camera)
 
+            det_size = _get_det_size()
 
             # Create worker
             worker = OptimizedCameraWorker(
@@ -560,8 +578,8 @@ class LiveDetectionPage(QWidget):
                 camera_source,
                 self.faiss_index_path,
                 self.faiss_metadata_path,
-                RECOG_THRESH,
-                resize_width=DET_SIZE[0],
+                _get_env("RECOG_THRESH", 0.20, float),
+                resize_width=det_size[0],
                 debug_mode=False ,
                 pose_predictor=predictor
             )

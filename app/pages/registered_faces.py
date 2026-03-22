@@ -17,37 +17,41 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QTimer, QThread, Signal
 from PySide6.QtGui import QPixmap, QImage, QColor
 
-load_dotenv()
+from dotenv import load_dotenv, dotenv_values
+from pathlib import Path
+from app.config.api_config import _get_api_base, _get_timeout, _get_endpoint
 
-# ─── API config from .env ─────────────────────────────────────────────────────
-API_HOST    = os.getenv("API_HOST",    "127.0.0.1")
-API_PORT    = os.getenv("API_PORT",    "8004")
-API_BASE    = f"http://{API_HOST}:{API_PORT}"
-API_TIMEOUT = int(os.getenv("API_TIMEOUT", "30"))
+
+
+_ENV_PATH = Path(".env")
+
+
 
 
 # ─── Low-level API helpers ────────────────────────────────────────────────────
 
 def _request(method: str, path: str, **kwargs):
-    """Thin wrapper around requests — raises RuntimeError on failure."""
-    url = f"{API_BASE}{path}"
+    api_base = _get_api_base()          # ← fresh every call
+    timeout  = _get_timeout()           # ← fresh every call
+    url = f"{api_base}{path}"
     try:
-        resp = requests.request(method, url, timeout=API_TIMEOUT, **kwargs)
+        resp = requests.request(method, url, timeout=timeout, **kwargs)
         resp.raise_for_status()
         return resp.json() if resp.content else {}
     except requests.exceptions.ConnectionError:
         raise RuntimeError(
-            f"Cannot connect to API at {API_BASE}.\n"
-            "Check that the server is running and that API_HOST / API_PORT are correct in .env"
+            f"Cannot connect to API at {api_base}.\n"
+            "Check that the server is running and API_HOST / API_PORT are correct in .env"
         )
     except requests.exceptions.Timeout:
-        raise RuntimeError(f"API request timed out after {API_TIMEOUT}s")
+        raise RuntimeError(f"API request timed out after {timeout}s")
     except requests.exceptions.HTTPError as e:
         try:
             detail = e.response.json().get("detail", e.response.text)
         except Exception:
             detail = e.response.text
         raise RuntimeError(f"API {e.response.status_code}: {detail}")
+
 
 
 def api_get_users(department=None, role=None, name=None) -> list[dict]:
@@ -359,7 +363,8 @@ class UsersPage(QWidget):
         header.addWidget(title)
         header.addStretch()
 
-        self.api_status = QLabel(f"🔗 {API_BASE}")
+        self.api_status = QLabel(f"🔗 {_get_api_base()}")
+
         self.api_status.setStyleSheet("color:#94a3b8; font-size:12px;")
         header.addWidget(self.api_status)
 
@@ -497,13 +502,13 @@ class UsersPage(QWidget):
         n = len(users)
         self.results_label.setText(f"Showing {n} user{'s' if n != 1 else ''}")
         self.results_label.setStyleSheet("color:#94a3b8; font-size:13px;")
-        self.api_status.setText(f"✅ {API_BASE}")
+        self.api_status.setText(f"✅ {_get_api_base()}")
         self.api_status.setStyleSheet("color:#10b981; font-size:12px;")
 
     def _on_error(self, msg: str):
         self.results_label.setText("❌ Failed to load users")
         self.results_label.setStyleSheet("color:#ef4444; font-size:13px;")
-        self.api_status.setText(f"❌ {API_BASE}")
+        self.api_status.setText(f"❌ {_get_api_base()}")
         self.api_status.setStyleSheet("color:#ef4444; font-size:12px;")
         QMessageBox.critical(self, "API Error", f"Failed to fetch users:\n\n{msg}")
 
