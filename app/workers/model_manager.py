@@ -9,11 +9,23 @@ import threading
 import time
 import numpy as np
 from insightface.app import FaceAnalysis
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+
+_det_size_env = os.getenv("DET_SIZE")
+DET_THRESH            = float(os.getenv("DET_THRESH", 0.3))
+DET_SIZE = tuple(int(x) for x in _det_size_env.split(",")) if _det_size_env else (640, 384)
+
+
 
 
 
 
 class ModelManager:
+
     _instance = None
     _lock = threading.Lock()
     _model = None
@@ -23,10 +35,11 @@ class ModelManager:
     # ── Store config at class level so all threads see the same settings ──
     _config = {
         'model_name': 'buffalo_s_int8',
-        'det_size':   (640, 640),
-        'det_thresh': 0.4,
+        'det_size':   DET_SIZE,
+        'det_thresh': DET_THRESH,
         'ctx_id':     0,
     }
+
 
     def __new__(cls, **kwargs):
         if cls._instance is None:
@@ -250,7 +263,7 @@ if __name__ == "__main__":
     
     # Test inference
     print("\n4. Testing inference...")
-    test_img = np.random.randint(0, 255, (640, 480, 3), dtype=np.uint8)
+    test_img = np.random.randint(0, 255, (DET_SIZE[0],DET_SIZE[1], 3), dtype=np.uint8)
     
     start = time.time()
     faces = model.get(test_img, max_num=10)

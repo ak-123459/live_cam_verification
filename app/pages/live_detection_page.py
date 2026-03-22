@@ -15,6 +15,18 @@ import numpy as np
 import sys
 import os
 from FacePose.app.predictor import FacePosePredictor
+from app.workers.model_manager import ModelManager
+from dotenv import load_dotenv
+import os
+
+
+
+load_dotenv()
+
+
+RECOG_THRESH =  float(os.getenv("RECOG_THRESH",.20))
+DET_SIZE = ModelManager._config['det_size']   # always in sync
+MAX_CAMERAS = int(os.getenv("MAX_CAMERA",2))
 
 
 
@@ -22,6 +34,7 @@ predictor = FacePosePredictor(
     model_path="models/face_side_det/logistic_model.joblib",
     label_encoder_path="models/face_side_det/label_encoder.joblib",
 )
+
 
 
 # Add the project root to the path if needed
@@ -247,38 +260,37 @@ class CameraWidget(QFrame):
             self.delete_requested.emit(self.camera_id)
 
     def update_frame(self, frame, results):
-        """Update video display with frame"""
-        # 🚫 Ignore all frames after the first one
+
+        # Only render the very first frame — snapshot mode
         if self.first_frame_rendered:
             return
+
         try:
             self.first_frame_rendered = True
-            self.is_running = True
 
-            # Draw detections on frame
+            self.is_running = True
             from app.workers.camera_worker import draw_detections
             frame = draw_detections(frame, results, self.current_fps)
 
-            # Convert to QImage
             height, width, channel = frame.shape
             bytes_per_line = 3 * width
             q_image = QImage(
                 frame.data, width, height, bytes_per_line, QImage.Format_RGB888
             ).rgbSwapped()
 
-            # Scale to fit label
             pixmap = QPixmap.fromImage(q_image)
             scaled_pixmap = pixmap.scaled(
                 self.video_label.size(),
                 Qt.KeepAspectRatio,
                 Qt.SmoothTransformation
             )
-
             self.video_label.setPixmap(scaled_pixmap)
             self.video_label.setStyleSheet("background-color: #000; border-radius: 8px;")
-
         except Exception as e:
             print(f"[CAMERA] Frame update error: {e}")
+
+
+
 
     def update_fps(self, fps):
         """Update FPS display"""
@@ -300,7 +312,7 @@ class CameraWidget(QFrame):
 class LiveDetectionPage(QWidget):
     """Main page showing live camera feeds with configuration persistence and quality profiles"""
 
-    MAX_CAMERAS = 2
+
 
     def __init__(self, attendance_manager, faiss_index_path, faiss_metadata_path, parent=None):
         super().__init__(parent)
@@ -312,6 +324,12 @@ class LiveDetectionPage(QWidget):
         # Quality profile manager
         self.quality_matcher = None
         self.profiles_checked = {}  # Track which cameras have profiles
+
+        self.MAX_CAMERAS = MAX_CAMERAS
+
+        from app.workers.recognition_dispatcher import RecognitionDispatcher
+        self._dispatcher = RecognitionDispatcher()
+        self._dispatcher.start()
 
         # Initialize configuration manager
         print("[LIVE] Initializing camera configuration manager...")
@@ -542,16 +560,32 @@ class LiveDetectionPage(QWidget):
                 camera_source,
                 self.faiss_index_path,
                 self.faiss_metadata_path,
-                .20,
-                resize_width=640,
+                RECOG_THRESH,
+                resize_width=DET_SIZE[0],
                 debug_mode=False ,
                 pose_predictor=predictor
             )
 
             # worker.watchlist_alert.connect(self.handle_watchlist_alert)
 
-            # Connect signals
-            worker.frame_ready.connect(camera_widget.update_frame)
+            def on_first_frame(frame, results):
+
+                camera_widget.update_frame(frame, results)
+
+                # Create quality profile from first live frame if not yet created
+                if self.quality_matcher and not self.profiles_checked.get(camera_id, False):
+                    try:
+                        self.quality_matcher.extract_quality_profile(frame, camera_id)
+                        self.profiles_checked[camera_id] = True
+                        print(f"[PROFILE] ✓ Profile created from live frame for {camera_id}")
+                    except Exception as e:
+                        print(f"[PROFILE] ❌ Failed to create profile: {e}")
+
+                worker.frame_ready.disconnect(on_first_frame)
+
+            worker.frame_ready.connect(on_first_frame)
+
+
             worker.fps_updated.connect(camera_widget.update_fps)
             worker.error_occurred.connect(
                 lambda msg: self.handle_camera_error(camera_id, camera_name, msg)
@@ -687,14 +721,16 @@ class LiveDetectionPage(QWidget):
         """Handle attendance marked event"""
         print(f"[ATTENDANCE] ✓ Marked: {name} (confidence: {confidence:.2%})")
 
+    # In cleanup()
     def cleanup(self):
-        """Stop all cameras before closing"""
         print("\n[LIVE] Cleaning up cameras...")
         for camera_id, worker in list(self.camera_workers.items()):
-            print(f"[LIVE] Stopping {camera_id}...")
             worker.stop()
             worker.wait(2000)
+        self._dispatcher.stop()  # ← stop shared worker last
         print("[LIVE] ✓ All cameras stopped\n")
+
+
 
     # def handle_watchlist_alert(self, user_id, name, confidence, category):
     #     """Handle watchlist alert from camera"""

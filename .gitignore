@@ -3,3 +3,9 @@ app/firebase/firebase_config.json
 attendance_images
 app/camera_profiles
 registered_faces
+venv
+.venv
+.env
+faiss_db
+captures
+camera_profiles

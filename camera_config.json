@@ -1,14 +1,23 @@
 {
     "cameras": [
         {
-            "camera_id": "cam_1_1773500275",
-            "name": "cam3",
-            "source": "http://10.165.114.156:8080/video",
+            "camera_id": "cam_2_1774120541",
+            "name": "cam2",
+            "source": "http://10.87.188.47:8080/video",
             "source_type": "RTSP Stream",
             "enabled": true,
-            "created_at": "2026-03-14T20:27:55.661747",
-            "last_used": "2026-03-14T20:27:55.661747"
+            "created_at": "2026-03-22T00:45:41.044468",
+            "last_used": "2026-03-22T00:45:41.044468"
+        },
+        {
+            "camera_id": "cam_2_1774178928",
+            "name": "cam5",
+            "source": "http://192.0.0.4:8080/video",
+            "source_type": "RTSP Stream",
+            "enabled": true,
+            "created_at": "2026-03-22T16:58:48.451829",
+            "last_used": "2026-03-22T16:58:48.451829"
         }
     ],
-    "last_updated": "2026-03-14T20:27:55.661747"
+    "last_updated": "2026-03-22T16:58:48.451829"
 }
